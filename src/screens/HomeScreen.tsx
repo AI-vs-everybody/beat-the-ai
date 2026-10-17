@@ -81,10 +81,10 @@ const MODES: Mode[] = [
   {
     key: 'multiplayer',
     icon: '👥',
-    title: 'Multiplayer (soon)',
+    title: 'Multiplayer',
     subtitle: 'Co-op vs AI or head-to-head.',
     color: '#FACC15',
-    soon: true,
+    route: 'Multiplayer',
   },
   {
     key: 'party',

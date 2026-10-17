@@ -16,6 +16,7 @@ import DailyChallengeScreen from './src/screens/DailyChallengeScreen';
 import PatternGauntletScreen from './src/screens/PatternGauntletScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import MissionsScreen from './src/screens/MissionsScreen';
+import MultiplayerHubScreen from './src/screens/MultiplayerHubScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -63,6 +64,7 @@ export default function App() {
             <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ title: 'Privacy Policy' }} />
             <Stack.Screen name="Terms" component={TermsScreen} options={{ title: 'Terms of Service' }} />
             <Stack.Screen name="Missions" component={MissionsScreen} options={{ title: 'Missions' }} />
+            <Stack.Screen name="Multiplayer" component={MultiplayerHubScreen} options={{ title: 'Multiplayer Hub' }} />
 
             {/* Daily with Exit in header */}
             <Stack.Screen
