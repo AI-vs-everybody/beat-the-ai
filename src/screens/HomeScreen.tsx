@@ -1,48 +1,253 @@
-// screens/HomeScreen.tsx
-import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+// src/screens/HomeScreen.tsx
+// RESTORATION Step 1 — Home shell + Game Modes list, rebuilt from the
+// authoritative screenshots (refs/ref-home-game-modes.jpg).
+// - Rotating Earth (NASA Blue Marble, public domain) behind all panels.
+// - Daily Challenge is the only wired mode. Every other card is visibly
+//   marked SOON and disabled — no nonfunctional navigation (per brief).
+// - The skeleton's "Welcome, human..." greeting is replaced by the
+//   screenshot's own taglines ("Save the world...", "The AI's waiting...").
+// - The "Dark" pill is a display-only theme indicator, not a toggle.
+import React, { useEffect, useRef } from 'react';
+import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+
+const EARTH = require('../../assets/earth.jpg');
+
+// Deterministic starfield (seeded, so it never flickers between renders).
+function buildStars(count: number) {
+  let seed = 42;
+  const next = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    left: next() * 100,
+    top: next() * 100,
+    size: 1 + next() * 2,
+    opacity: 0.25 + next() * 0.6,
+  }));
+}
+const STARS = buildStars(60);
+
+type Mode = {
+  key: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+  color: string;
+  route?: string;
+  soon?: boolean;
+};
+
+const MODES: Mode[] = [
+  {
+    key: 'roast',
+    icon: '🤖',
+    title: 'Beat the AI — Roast Sort',
+    subtitle: 'Neon data, savage taunts, jackpots.',
+    color: '#5B6CFF',
+    soon: true,
+  },
+  {
+    key: 'daily',
+    icon: '⚡',
+    title: 'Daily Challenge',
+    subtitle: 'Smart trivia sessions. New set every day.',
+    color: '#22D3EE',
+    route: 'Daily',
+  },
+  {
+    key: 'pattern',
+    icon: '🧠',
+    title: 'Pattern Gauntlet',
+    subtitle: 'Remember and repeat the sequences.',
+    color: '#7C6CFF',
+    soon: true,
+  },
+  {
+    key: 'reflex',
+    icon: '💨',
+    title: 'Reflex Arena',
+    subtitle: 'Arcade-speed taps & swipes. Escalating pace.',
+    color: '#22D3EE',
+    soon: true,
+  },
+  {
+    key: 'multiplayer',
+    icon: '👥',
+    title: 'Multiplayer (soon)',
+    subtitle: 'Co-op vs AI or head-to-head.',
+    color: '#FACC15',
+    soon: true,
+  },
+  {
+    key: 'party',
+    icon: '🎉',
+    title: 'Party Mode (soon)',
+    subtitle: 'Up to 4 players — versus or co-op.',
+    color: '#F87171',
+    soon: true,
+  },
+  {
+    key: 'leaderboard',
+    icon: '🏆',
+    title: 'Leaderboard',
+    subtitle: 'Global rankings (coming soon).',
+    color: '#4ADE80',
+    soon: true,
+  },
+];
 
 export default function HomeScreen() {
   const nav = useNavigation();
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 120000, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin]);
+
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: '#000',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-      }}
-    >
-      <Text
-        style={{
-          color: '#0ff',
-          fontSize: 24,
-          fontWeight: '900',
-          textAlign: 'center',
-          marginBottom: 16,
-        }}
-      >
-        Welcome, human. Try not to embarrass yourself. [HUB v1]
-      </Text>
+    <View style={styles.root}>
+      {/* Space backdrop: stars + rotating Earth, behind everything. */}
+      {STARS.map((s) => (
+        <View
+          key={s.id}
+          style={{
+            position: 'absolute',
+            left: `${s.left}%`,
+            top: `${s.top}%`,
+            width: s.size,
+            height: s.size,
+            borderRadius: s.size / 2,
+            backgroundColor: '#fff',
+            opacity: s.opacity,
+          }}
+        />
+      ))}
+      <Animated.View style={[styles.earthWrap, { transform: [{ rotate }] }]}>
+        <Image source={EARTH} style={styles.earth} resizeMode="cover" />
+      </Animated.View>
 
-      <Pressable onPress={() => nav.navigate('Daily' as never)} style={{ marginTop: 12 }}>
-        <Text style={{ color: '#0ff', textDecorationLine: 'underline' }}>Daily Challenge</Text>
-      </Pressable>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>Beat the AI</Text>
+            <Text style={styles.tagline}>Save the world. One pattern at a time.</Text>
+          </View>
+          <Pressable
+            onPress={() => nav.navigate('Settings' as never)}
+            style={styles.gear}
+            accessibilityLabel="Open Settings"
+          >
+            <Text style={{ fontSize: 24 }}>⚙️</Text>
+          </Pressable>
+        </View>
 
-      <Pressable onPress={() => nav.navigate('Pattern' as never)} style={{ marginTop: 12 }}>
-        <Text style={{ color: '#0ff', textDecorationLine: 'underline' }}>Pattern Gauntlet</Text>
-      </Pressable>
+        {/* Game Modes */}
+        <Text style={styles.sectionTitle}>Game Modes</Text>
+        <Text style={styles.sectionSub}>The AI&apos;s waiting. Don&apos;t keep it bored.</Text>
 
-      <Pressable onPress={() => nav.navigate('Leaderboard' as never)} style={{ marginTop: 12 }}>
-        <Text style={{ color: '#0ff', textDecorationLine: 'underline' }}>Leaderboard</Text>
-      </Pressable>
+        {MODES.map((m) => (
+          <Pressable
+            key={m.key}
+            disabled={m.soon}
+            onPress={() => m.route && nav.navigate(m.route as never)}
+            style={[styles.card, { borderColor: m.color, opacity: m.soon ? 0.75 : 1 }]}
+          >
+            <Text style={styles.cardIcon}>{m.icon}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{m.title}</Text>
+              <Text style={styles.cardSub}>{m.subtitle}</Text>
+            </View>
+            {m.soon ? (
+              <Text style={[styles.soonPill, { borderColor: m.color, color: m.color }]}>SOON</Text>
+            ) : (
+              <View style={[styles.dot, { backgroundColor: m.color }]} />
+            )}
+          </Pressable>
+        ))}
 
-      <Pressable onPress={() => nav.navigate('Settings' as never)} style={{ marginTop: 12 }}>
-        <Text style={{ color: '#0ff', textDecorationLine: 'underline' }}>Settings</Text>
-      </Pressable>
+        {/* Theme indicator (display-only — Dark is the only theme). */}
+        <View style={styles.darkPill}>
+          <View style={styles.darkDot} />
+          <Text style={styles.darkText}>Dark</Text>
+        </View>
+      </ScrollView>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#05060F' },
+  earthWrap: {
+    position: 'absolute',
+    top: -140,
+    alignSelf: 'center',
+    width: 560,
+    height: 560,
+    borderRadius: 280,
+    overflow: 'hidden',
+    opacity: 0.9,
+  },
+  earth: { width: 560, height: 560 },
+  scroll: { padding: 20, paddingTop: 56, paddingBottom: 32 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  title: { color: '#fff', fontSize: 40, fontWeight: '900', letterSpacing: 0.5 },
+  tagline: { color: '#9AA0B5', fontSize: 15, fontWeight: '600', marginTop: 4 },
+  gear: {
+    borderWidth: 1,
+    borderColor: '#2A2E55',
+    borderRadius: 14,
+    padding: 10,
+    backgroundColor: 'rgba(16,18,42,0.85)',
+  },
+  sectionTitle: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: 28 },
+  sectionSub: { color: '#9AA0B5', fontSize: 15, marginTop: 4, marginBottom: 16 },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 20,
+    backgroundColor: 'rgba(16,18,42,0.92)',
+    padding: 16,
+    marginBottom: 14,
+  },
+  cardIcon: { fontSize: 28 },
+  cardTitle: { color: '#fff', fontSize: 19, fontWeight: '800' },
+  cardSub: { color: '#9AA0B5', fontSize: 14, marginTop: 2 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  soonPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    overflow: 'hidden',
+  },
+  darkPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#2A2E55',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 8,
+    backgroundColor: 'rgba(16,18,42,0.85)',
+  },
+  darkDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22D3EE' },
+  darkText: { color: '#fff', fontWeight: '700' },
+});
