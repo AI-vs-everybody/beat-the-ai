@@ -7,11 +7,14 @@
 // - The skeleton's "Welcome, human..." greeting is replaced by the
 //   screenshot's own taglines ("Save the world...", "The AI's waiting...").
 // - The "Dark" pill is a display-only theme indicator, not a toggle.
+// - Meteor streaks fly across the sky on staggered loops (Step 1b).
+//   Pure decoration: pointerEvents="none", never blocks touches.
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet, Easing, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 const EARTH = require('../../assets/earth.jpg');
+const { width: W } = Dimensions.get('window');
 
 // Deterministic starfield (seeded, so it never flickers between renders).
 function buildStars(count: number) {
@@ -99,6 +102,54 @@ const MODES: Mode[] = [
   },
 ];
 
+// One meteor streak: flies diagonally down-left, fades in/out, then rests
+// before the loop repeats. Staggered delays keep them irregular.
+function Meteor({ delay, duration, topPct, drift }: { delay: number; duration: number; topPct: number; drift: number }) {
+  const p = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(p, { toValue: 1, duration, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(p, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.delay(4000),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [p, delay, duration]);
+
+  const translateX = p.interpolate({ inputRange: [0, 1], outputRange: [W + 80, -220] });
+  const translateY = p.interpolate({ inputRange: [0, 1], outputRange: [0, drift] });
+  const opacity = p.interpolate({ inputRange: [0, 0.08, 0.85, 1], outputRange: [0, 1, 1, 0] });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: `${topPct}%`,
+        left: 0,
+        opacity,
+        transform: [{ translateX }, { translateY }, { rotate: '-24deg' }],
+        flexDirection: 'row',
+        alignItems: 'center',
+      }}
+    >
+      <View style={styles.meteorHead} />
+      <View style={styles.meteorTail} />
+    </Animated.View>
+  );
+}
+
+const METEORS = [
+  { delay: 800, duration: 1600, topPct: 6, drift: 300 },
+  { delay: 5200, duration: 2100, topPct: 18, drift: 380 },
+  { delay: 9800, duration: 1400, topPct: 32, drift: 260 },
+  { delay: 14200, duration: 2400, topPct: 12, drift: 420 },
+];
+
 export default function HomeScreen() {
   const nav = useNavigation();
   const spin = useRef(new Animated.Value(0)).current;
@@ -131,9 +182,12 @@ export default function HomeScreen() {
           }}
         />
       ))}
-      <Animated.View style={[styles.earthWrap, { transform: [{ rotate }] }]}>
+      <Animated.View pointerEvents="none" style={[styles.earthWrap, { transform: [{ rotate }] }]}>
         <Image source={EARTH} style={styles.earth} resizeMode="cover" />
       </Animated.View>
+      {METEORS.map((m, i) => (
+        <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
+      ))}
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
@@ -250,4 +304,19 @@ const styles = StyleSheet.create({
   },
   darkDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22D3EE' },
   darkText: { color: '#fff', fontWeight: '700' },
+  meteorHead: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+    shadowColor: '#fff',
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+  },
+  meteorTail: {
+    width: 110,
+    height: 2.5,
+    borderRadius: 1.25,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+  },
 });
