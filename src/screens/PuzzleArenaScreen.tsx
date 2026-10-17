@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { buildRound, RoundPuzzle, ROUND_SIZE, TIMER_SECONDS, VICTORY_THRESHOLD } from '../data/puzzles';
+import { deadlineFor, remainingSeconds, isStaleTick } from '../data/arenaTimer';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type Phase = 'select' | 'playing' | 'results';
@@ -39,6 +40,19 @@ export default function PuzzleArenaScreen() {
   const answeredRef = useRef(false);
   const advanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Deadline-based timing (Stage 2 corrections): the current question's
+  // expiry is a wall-clock timestamp. Remaining time is always
+  // deadline - now, so background time counts against the player and
+  // tick timing only affects display smoothness, never accuracy.
+  const deadlineRef = useRef(0);
+  // Generation token: incremented on every question start. A timer tick
+  // that captured an older generation is stale and must be ignored, so
+  // a previous question's timer can never affect the next question.
+  const questionGenRef = useRef(0);
+  // The round's difficulty, fixed at round start (the selection UI is
+  // only shown between rounds, so this never changes mid-round).
+  const roundDifficultyRef = useRef<Difficulty>('medium');
+
   const clearAdvanceTimeout = () => {
     if (advanceTimeoutRef.current) {
       clearTimeout(advanceTimeoutRef.current);
@@ -50,27 +64,45 @@ export default function PuzzleArenaScreen() {
   // player leaves the screen.
   useEffect(() => () => clearAdvanceTimeout(), []);
 
+  // Start (or re-start) a question's clock: full allotted time from a
+  // fresh wall-clock deadline, and a new generation that invalidates
+  // any timer event from the previous question.
+  const startQuestion = useCallback(() => {
+    const total = TIMER_SECONDS[roundDifficultyRef.current];
+    deadlineRef.current = deadlineFor(total);
+    questionGenRef.current += 1;
+    setTimeLeft(total);
+  }, []);
+
   const startRound = useCallback(() => {
     clearAdvanceTimeout();
     answeredRef.current = false;
+    roundDifficultyRef.current = selected;
     setRound(buildRound());
     setIndex(0);
     setCorrect(0);
     setResults([]);
     setAnswered(null);
-    setTimeLeft(TIMER_SECONDS[selected]);
+    startQuestion();
     setPhase('playing');
-  }, [selected]);
+  }, [selected, startQuestion]);
 
-  const advance = useCallback((isLast: boolean) => {
-    if (isLast) {
-      setPhase('results');
-    } else {
-      setIndex((i) => i + 1);
-      setAnswered(null);
-      answeredRef.current = false;
-    }
-  }, []);
+  const advance = useCallback(
+    (isLast: boolean) => {
+      if (isLast) {
+        setPhase('results');
+      } else {
+        setIndex((i) => i + 1);
+        setAnswered(null);
+        answeredRef.current = false;
+        // Fresh deadline + generation for the next question, so it
+        // starts with its full allotted time and no stale timer event
+        // from the previous question can touch it.
+        startQuestion();
+      }
+    },
+    [startQuestion],
+  );
 
   const scheduleAdvance = useCallback(
     (isLast: boolean) => {
@@ -103,17 +135,23 @@ export default function PuzzleArenaScreen() {
     scheduleAdvance(index >= round.length - 1);
   }, [phase, index, round.length, scheduleAdvance]);
 
-  // Timer: tick down once a second while playing and unanswered.
+  // Timer tick: recompute remaining time from the wall-clock deadline
+  // (never decrement a counter). Ticks only refresh the display; the
+  // deadline is the source of truth, so a late/throttled tick — e.g.
+  // after the app was backgrounded — can never grant extra time.
+  // The tick captures the current generation and ignores itself if the
+  // generation moved on (stale tick from a previous question).
   // The interval is recreated on every index/phase/answered change and
   // cleared on cleanup — no timer survives leaving the screen.
   useEffect(() => {
     if (phase !== 'playing' || answered) return;
-    setTimeLeft(TIMER_SECONDS[selected]);
+    const gen = questionGenRef.current;
     const id = setInterval(() => {
-      setTimeLeft((t) => Math.max(0, t - 1));
-    }, 1000);
+      if (isStaleTick(gen, questionGenRef.current)) return;
+      setTimeLeft(remainingSeconds(deadlineRef.current));
+    }, 250);
     return () => clearInterval(id);
-  }, [phase, index, selected, answered]);
+  }, [phase, index, answered]);
 
   // Timeout reaction: when the clock hits zero, the puzzle counts as
   // wrong and the round advances after the feedback delay.
