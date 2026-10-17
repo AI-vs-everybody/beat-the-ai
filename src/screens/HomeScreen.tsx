@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet, Easing, Dimensions } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import FeaturedDashboard from '../components/FeaturedDashboard';
-import { loadProgress, Progress } from '../data/progress';
+import { loadProgress, todayKey, Progress } from '../data/progress';
 
 const EARTH = require('../../assets/earth.jpg');
 const { width: W } = Dimensions.get('window');
@@ -157,24 +157,28 @@ export default function HomeScreen() {
   const spin = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState<Progress | null>(null);
 
-  // Refresh progress whenever Home regains focus (e.g. returning from Daily).
+  // Focus refresh + midnight refresh, both only while Home is focused.
+  // - Focus refresh (existing behavior): reload progress whenever Home
+  //   regains focus (e.g. returning from Daily).
+  // - Midnight refresh: while focused, poll the local calendar date every
+  //   30s. The date string is compared BEFORE any storage read — if the
+  //   date has not changed, AsyncStorage is never touched. On a date flip,
+  //   reload (pot rolls, streak decay applies via loadProgress).
+  // The interval is created on focus and cleared on blur, so it never
+  // runs while another screen is in front.
   useFocusEffect(
     useCallback(() => {
       loadProgress().then(setProgress);
+      let lastSeenDate = todayKey();
+      const id = setInterval(() => {
+        const now = todayKey();
+        if (now === lastSeenDate) return;
+        lastSeenDate = now;
+        loadProgress().then(setProgress);
+      }, 30_000);
+      return () => clearInterval(id);
     }, []),
   );
-
-  // Refresh across local midnight while Home stays open: the focus reload
-  // alone leaves yesterday's pot/streak on screen if the app is left
-  // running past midnight. Poll the date; reload only when the day flips.
-  useEffect(() => {
-    const id = setInterval(() => {
-      loadProgress().then((p) => {
-        setProgress((prev) => (prev && p.potDate !== prev.potDate ? p : prev));
-      });
-    }, 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     const loop = Animated.loop(
