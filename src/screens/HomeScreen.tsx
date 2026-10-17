@@ -102,6 +102,14 @@ const MODES: Mode[] = [
     color: '#4ADE80',
     soon: true,
   },
+  {
+    key: 'puzzle',
+    icon: '🧩',
+    title: 'Puzzle Arena',
+    subtitle: 'Pick a difficulty. Puzzles coming soon.',
+    color: '#F472B6',
+    route: 'PuzzleArena',
+  },
 ];
 
 // One meteor streak: flies diagonally down-left, fades in/out, then rests
