@@ -1,7 +1,8 @@
 // screens/DailyChallengeScreen.tsx
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, Pressable, Alert, BackHandler, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { recordDailyCompletion } from '../data/progress';
 
 type Q = { q: string; options: string[]; a: number };
 
@@ -40,6 +41,15 @@ export default function DailyChallengeScreen() {
   const [i, setI] = useState(0);
   const [score, setScore] = useState(0);
   const done = i >= questions.length;
+
+  // Record one completion per day (idempotent in progress.ts -- replays record nothing). A completion counts as a Daily win for the pot.
+  const recorded = useRef(false);
+  useEffect(() => {
+    if (done && !recorded.current) {
+      recorded.current = true;
+      recordDailyCompletion(score);
+    }
+  }, [done, score]);
 
   const confirmExit = useCallback(() => {
     Alert.alert('Exit Daily?', 'Your progress will be lost.', [

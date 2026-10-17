@@ -9,9 +9,11 @@
 // - The "Dark" pill is a display-only theme indicator, not a toggle.
 // - Meteor streaks fly across the sky on staggered loops (Step 1b).
 //   Pure decoration: pointerEvents="none", never blocks touches.
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet, Easing, Dimensions } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import FeaturedDashboard from '../components/FeaturedDashboard';
+import { loadProgress, Progress } from '../data/progress';
 
 const EARTH = require('../../assets/earth.jpg');
 const { width: W } = Dimensions.get('window');
@@ -153,6 +155,14 @@ const METEORS = [
 export default function HomeScreen() {
   const nav = useNavigation();
   const spin = useRef(new Animated.Value(0)).current;
+  const [progress, setProgress] = useState<Progress | null>(null);
+
+  // Refresh progress whenever Home regains focus (e.g. returning from Daily).
+  useFocusEffect(
+    useCallback(() => {
+      loadProgress().then(setProgress);
+    }, []),
+  );
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -204,6 +214,9 @@ export default function HomeScreen() {
             <Text style={{ fontSize: 24 }}>⚙️</Text>
           </Pressable>
         </View>
+
+        {/* Featured dashboard (Step 2) — real pot / countdown / missions / streak. */}
+        {progress && <FeaturedDashboard progress={progress} />}
 
         {/* Game Modes */}
         <Text style={styles.sectionTitle}>Game Modes</Text>
