@@ -7,14 +7,14 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Screens
-import HomeScreen from './screens/HomeScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import TermsScreen from './screens/TermsScreen';
-import PrivacyScreen from './screens/PrivacyScreen';
-import AgeGateScreen from './screens/AgeGateScreen';
-import DailyChallengeScreen from './screens/DailyChallengeScreen';
-import PatternGauntletScreen from './screens/PatternGauntletScreen';
-import LeaderboardScreen from './screens/LeaderboardScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import TermsScreen from './src/screens/TermsScreen';
+import PrivacyScreen from './src/screens/PrivacyScreen';
+import AgeGateScreen from './src/screens/AgeGateScreen';
+import DailyChallengeScreen from './src/screens/DailyChallengeScreen';
+import PatternGauntletScreen from './src/screens/PatternGauntletScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -84,8 +84,6 @@ export default function App() {
               })}
             />
 
-<Stack.Screen name="Pattern" component={PatternGauntletScreen} options={{ title: 'Pattern Gauntlet' }} />
-<Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ title: 'Leaderboard' }} />
 
             {/* Pattern with Exit in header */}
             <Stack.Screen
