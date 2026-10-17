@@ -27,7 +27,11 @@ export function todayKey(d = new Date()): string {
 }
 
 export function yesterdayKey(d = new Date()): string {
-  return todayKey(new Date(d.getTime() - 24 * 60 * 60 * 1000));
+  // Calendar arithmetic, NOT 24h of milliseconds: on the day after a
+  // spring-forward (23h day), now - 86400000 lands on the day BEFORE
+  // yesterday for times in the first hour after midnight. setDate
+  // normalizes across month/year boundaries and DST transitions.
+  return todayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1));
 }
 
 export function defaultProgress(): Progress {
@@ -73,7 +77,23 @@ export async function saveProgress(p: Progress): Promise<void> {
 
 // Record one Daily completion. Idempotent per local day: replaying the
 // Daily records nothing. A completion counts as a "win" for the pot.
-export async function recordDailyCompletion(correct: number): Promise<Progress> {
+//
+// Writes are serialized through a promise queue: two concurrent calls
+// (e.g. a double-fired effect) must not both read "not completed today"
+// and both count the win. The second call re-loads AFTER the first saved,
+// so it sees today as completed and records nothing.
+let completionQueue: Promise<unknown> = Promise.resolve();
+
+export function recordDailyCompletion(correct: number): Promise<Progress> {
+  const run = completionQueue.then(() => recordDailyCompletionInner(correct));
+  completionQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function recordDailyCompletionInner(correct: number): Promise<Progress> {
   const p = await loadProgress();
   const today = todayKey();
   if (p.completedDates.includes(today)) return p;

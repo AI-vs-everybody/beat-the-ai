@@ -164,6 +164,18 @@ export default function HomeScreen() {
     }, []),
   );
 
+  // Refresh across local midnight while Home stays open: the focus reload
+  // alone leaves yesterday's pot/streak on screen if the app is left
+  // running past midnight. Poll the date; reload only when the day flips.
+  useEffect(() => {
+    const id = setInterval(() => {
+      loadProgress().then((p) => {
+        setProgress((prev) => (prev && p.potDate !== prev.potDate ? p : prev));
+      });
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     const loop = Animated.loop(
       Animated.timing(spin, { toValue: 1, duration: 120000, useNativeDriver: true }),
