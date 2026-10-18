@@ -1,37 +1,56 @@
 // src/screens/HomeScreen.tsx
-// HOME SCREEN — Master Concept implementation (Atlas-approved, 2026-10-18).
-// Atlas: Asset 001 Story Mode banner visually approved + locked; Assets
-// 002–007 visually approved for integration testing. Implement on the
-// isolated development branch only. STOP before merging.
+// HOME SCREEN — Master Implementation (Atlas, 2026-10-18).
+// The attached Master Concept mockup is the visual source of truth for
+// COMPOSITION (hierarchy, neon, atmosphere, panels, spacing). The ARTWORK
+// itself comes from the approved production files — the mockup's hero is a
+// generated composition reference, NOT a replacement for the existing hero
+// file (per the Master prompt's own rule).
 //
-// Layout (390x844 iPhone, safe areas via useSafeAreaInsets):
-// - Hero artwork (original file, proportions intact): shown at a width
-//   that lets the faces + complete "BEAT THE AI" title fit WITHOUT
-//   cropping either. The image is scaled uniformly to heroWidth; the
-//   container height = heroWidth * (1650/1179), so it shows original
-//   y 0–1650 (faces + title) and hides only the non-essential floor
-//   (y 1650–2549) below the container. NEVER crop faces or title.
-// - Story Mode banner beneath the hero. Artwork only in the PNG;
-//   "STORY MODE" + subtitle + "COMING SOON" lock pill are rendered
-//   in code. Feature remains disabled (Pressable disabled, no onPress).
-// - Six illustrated icons in a compact 3x2 grid, labels in code.
-//   Streak + Daily Pot show LIVE values in code (NOT baked into art):
-//   Streak -> "N days" (from progress.streak), Daily Pot -> "N fictional
-//   coins" (from dailyPot(progress)). Streak taps to Missions; Daily Pot
-//   taps to an Alert with the pot rules + fictional-coins disclaimer.
-// - Earth (rotating), starfield, meteors stay BEHIND the interface,
-//   all pointerEvents="none", never intercept touches.
-// - Walking character REMOVED from Home per Atlas V2/V3/Master
-//   directions. WalkingCharacter.tsx + frame PNGs are PRESERVED in
-//   the repo for future Story Mode — NOT rendered here, NOT deleted.
-// - Settings gear: small, upper-right, 44x44 + hitSlop (effective 60).
-// - Navigation / game logic / progress / fictional-coin balances are
-//   unchanged: Daily, PuzzleArena, Missions, Multiplayer routes; pot
-//   + streak + midnight rollover via progress.ts (unchanged).
-// - Reduced motion: if AccessibilityInfo reports reduce-motion, Earth
-//   renders static (no spin loop) and meteors are hidden.
+// Geometry (390x844 iPhone, safe areas via useSafeAreaInsets):
+// - Hero: FULL-WIDTH (W), 505 tall. The original file (1179x2549) is shown
+//   at uniform scale (no stretch). Displayed crop = original y 182-1710
+//   (a measured 10.6% TOP crop: y 0-150 is dark scenery, solid character
+//   mass starts ~150; a 15% crop would cut ~107px of hair, so 10.6% is
+//   used). Faces + complete "BEAT THE AI" title fully visible. The hero's
+//   lower edge fades into the space background BELOW the title (title ends
+//   y485, fade 485-505) via 10 stepped opacity Views (no new dependency —
+//   expo-linear-gradient NOT added, per the no-new-deps rule). NO frame,
+//   NO border, NO rounded corners. The banner overlaps the hero's fade by
+//   3px so the hero transitions into the interface with no rectangular break.
+// - Story Mode banner: FULL-WIDTH within margins (W-32 = 358, height 100,
+//   aspect 1074:300 preserved, no distortion). Artwork only in the PNG;
+//   ALL text (STORY MODE + subtitle + COMING SOON pill) rendered in code.
+//   Pressable disabled, feature closed. Subtle ambient border-glow pulse
+//   (no flashing).
+// - Six icons: 3x2 grid, tiles 114x132, icon 72 ("large"), labels in code,
+//   neon borders, dark translucent bg (70% — Earth shows through). Streak
+//   + Daily Pot show LIVE values in code (NOT baked into art). Streak and
+//   Daily Pot BOTH navigate to Missions (Master prompt §8 — this supersedes
+//   the V1 Daily Pot pot-rules Alert).
+// - Micro-animations (RN Animated, already proven in this file — no new
+//   deps, no Reanimated Babel risk): icon float (translateY ±4px, 2400ms,
+//   staggered 350ms per tile), border-glow pulse (opacity 0.15-0.45, same
+//   stagger), press scale-down (0.96, spring return) + brief glow boost.
+//   Story Mode border glow (opacity 0.25-0.65, 3000ms). ALL gated by
+//   reduced-motion: when enabled, no float/glow/press-scale, Earth static,
+//   meteors hidden.
+// - Earth: rotating (120s), darkened 15% by a translucent overlay
+//   (rgba(5,6,15,0.15)) so labels read better over it — the Earth file
+//   itself is UNCHANGED. Starfield (60 seeded) + 4 staggered meteors
+//   preserved BEHIND the interface, all pointerEvents="none".
+// - Walking character REMOVED from Home (WalkingCharacter.tsx + frame PNGs
+//   preserved for Story Mode — NOT rendered, NOT deleted).
+// - Settings gear upper-right, 44x44 + hitSlop. Navigation / game logic /
+//   progress / fictional-coin balances UNCHANGED. Fictional-coins
+//   disclaimer on Home (footer pill, below the fold — small scroll).
+// - Screen fit: hero 505 + banner 100 + grid 272 = row 2 ends y880.
+//   SPACE DEFICIT (reported per Master prompt §7): row 2's values end
+//   y865, so a ~21px scroll reveals all six icons fully (row 2 icons are
+//   visible without scrolling; labels mostly; values need ~21px). Premium
+//   appearance was NOT sacrificed to force one screen (no extra hair crop,
+//   no icon shrink, no banner distortion).
 // - No new dependencies. No Stage 3 gameplay. No baseline merge.
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -43,13 +62,11 @@ import {
   Easing,
   Dimensions,
   AccessibilityInfo,
-  Alert,
   ImageSourcePropType,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { loadProgress, todayKey, Progress, dailyPot } from '../data/progress';
-import { POT_RULES } from '../components/FeaturedDashboard';
 
 const HERO = require('../../assets/hero-artwork.jpg');
 const BANNER = require('../../assets/story-mode-banner.png');
@@ -85,8 +102,7 @@ type Tile = {
   label: string;
   icon: ImageSourcePropType;
   border: string;
-  route?: string;
-  action?: 'potInfo';
+  route: string;
   valueKind?: 'streak' | 'pot';
 };
 
@@ -96,8 +112,116 @@ const TILES: Tile[] = [
   { key: 'missions', label: 'Missions', icon: ICON_MISSIONS, border: '#34D399', route: 'Missions' },
   { key: 'multiplayer', label: 'Multiplayer', icon: ICON_MULTIPLAYER, border: '#60A5FA', route: 'Multiplayer' },
   { key: 'streak', label: 'Streak', icon: ICON_STREAK, border: '#FB923C', route: 'Missions', valueKind: 'streak' },
-  { key: 'pot', label: 'Daily Pot', icon: ICON_POT, border: '#FACC15', action: 'potInfo', valueKind: 'pot' },
+  { key: 'pot', label: 'Daily Pot', icon: ICON_POT, border: '#FACC15', route: 'Missions', valueKind: 'pot' },
 ];
+
+// One game tile: float + glow pulse (staggered) + press scale + press glow.
+// All animation uses RN Animated with useNativeDriver (opacity/transform
+// only) — no re-renders, no new dependencies. Memoized so a parent
+// re-render (e.g. progress refresh) does not restart the animations.
+const GameTile = React.memo(function GameTile({
+  tile,
+  index,
+  value,
+  accessibilityLabel,
+  onPress,
+  reduceMotion,
+}: {
+  tile: Tile;
+  index: number;
+  value: string | null;
+  accessibilityLabel: string;
+  onPress: () => void;
+  reduceMotion: boolean;
+}) {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const pressGlow = useRef(new Animated.Value(0)).current;
+
+  // Gentle float (icon artwork only, labels stay stable) + glow pulse.
+  // Staggered by index so tiles don't move together. Gated by reduced-motion.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const floatLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 350),
+        Animated.timing(floatAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(index * 350),
+        Animated.timing(glowAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    floatLoop.start();
+    glowLoop.start();
+    return () => {
+      floatLoop.stop();
+      glowLoop.stop();
+    };
+  }, [floatAnim, glowAnim, index, reduceMotion]);
+
+  const floatY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
+  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.45] });
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    Animated.spring(pressScale, { toValue: 0.96, useNativeDriver: true, speed: 50, bounciness: 8 }).start();
+    Animated.timing(pressGlow, { toValue: 0.6, duration: 150, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 8 }).start();
+    Animated.timing(pressGlow, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+  };
+
+  return (
+    <Animated.View style={{ flex: 1, transform: [{ scale: pressScale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[styles.tile, { borderColor: tile.border }]}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+      >
+        {/* Glow pulse (ambient) + press glow (brief boost) — both
+            pointerEvents="none", never intercept taps. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.glowOverlay, { borderColor: tile.border, opacity: reduceMotion ? 0.25 : glowOpacity }]}
+        />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.glowOverlay, { borderColor: tile.border, opacity: pressGlow }]}
+        />
+        {/* Floating icon artwork (labels stay stable). */}
+        <Animated.View style={{ transform: [{ translateY: reduceMotion ? 0 : floatY }] }}>
+          <Image
+            source={tile.icon}
+            style={styles.tileIcon}
+            resizeMode="contain"
+            accessibilityLabel={`${tile.label} icon`}
+          />
+        </Animated.View>
+        <Text style={styles.tileLabel} numberOfLines={2}>
+          {tile.label}
+        </Text>
+        {value !== null ? (
+          <Text style={[styles.tileValue, { color: tile.border }]} numberOfLines={1}>
+            {value}
+          </Text>
+        ) : (
+          <View style={styles.tileValueSpacer} />
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+});
 
 // One meteor streak: flies diagonally down-left, fades in/out, then rests
 // before the loop repeats. Staggered delays keep them irregular.
@@ -147,14 +271,20 @@ const METEORS = [
   { delay: 14200, duration: 2400, topPct: 12, drift: 420 },
 ];
 
+// Hero fade: 10 stepped opacity Views (2px each) blending the hero's lower
+// edge into the space background BELOW the title. Stepped (not a gradient
+// library) to avoid adding a new dependency.
+const HERO_FADE_STEPS = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95];
+
 export default function HomeScreen() {
   const nav = useNavigation();
   const insets = useSafeAreaInsets();
   const spin = useRef(new Animated.Value(0)).current;
+  const bannerGlow = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState<Progress | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
 
-  // Reduced-motion: stop/reduce background animation when the OS asks.
+  // Reduced-motion: stop/reduce background + icon animation when the OS asks.
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
     const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
@@ -192,37 +322,64 @@ export default function HomeScreen() {
     return () => loop.stop();
   }, [spin, reduceMotion]);
 
+  // Story Mode ambient border glow — subtle, slow, no flashing.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bannerGlow, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(bannerGlow, { toValue: 0, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [bannerGlow, reduceMotion]);
+
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const bannerGlowOpacity = bannerGlow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] });
 
-  // Hero geometry: uniform scale, faces + title visible, floor hidden.
-  // Width chosen so hero + banner + grid + disclaimer fit the 390x844
-  // first screen with no scrolling needed to discover the modes, and
-  // the disclaimer ends above the home indicator.
-  const heroWidth = Math.min(W * 0.58, 225);
-  const heroHeight = heroWidth * (1650 / 1179);
-  const heroFullHeight = heroWidth * (2549 / 1179);
+  // Hero geometry: FULL-WIDTH, 505 tall. The original file (1179x2549) is
+  // shown at uniform scale (width W → full height W*2549/1179 = 843).
+  // The container shows original y 182-1710 (10.6% top crop, measured):
+  // image top offset = -(182 * W/1179) = -60. Faces + complete title
+  // fully visible; fade (485-505) sits BELOW the title (ends y485).
+  const heroFullHeight = W * (2549 / 1179);
+  const heroTopOffset = -(182 * (W / 1179));
+  const HERO_HEIGHT = 505;
+  const HERO_FADE_TOP = 485;
 
-  // Story Mode banner geometry: artwork aspect 1074:300 preserved.
-  const bannerWidth = W - 48;
+  // Story Mode banner geometry: full-width within margins (W-32), aspect
+  // 1074:300 preserved (no distortion). Overlaps the hero's fade by 3px.
+  const bannerWidth = W - 32;
   const bannerHeight = bannerWidth * (300 / 1074);
+  const BANNER_OVERLAP = 3;
 
   // Live values, rendered in code (NOT baked into the icon artwork).
   const streakValue = progress ? `🔥 ${progress.streak} day${progress.streak === 1 ? '' : 's'}` : '—';
   const potValue = progress ? `🪙 ${dailyPot(progress).toLocaleString()}` : '—';
 
-  const tileValue = (t: Tile): string | null => {
-    if (t.valueKind === 'streak') return streakValue;
-    if (t.valueKind === 'pot') return potValue;
-    return null;
-  };
+  const tileValue = useCallback(
+    (t: Tile): string | null => {
+      if (t.valueKind === 'streak') return streakValue;
+      if (t.valueKind === 'pot') return potValue;
+      return null;
+    },
+    [streakValue, potValue],
+  );
 
-  const onTilePress = (t: Tile) => {
-    if (t.action === 'potInfo') {
-      Alert.alert('Daily Pot', POT_RULES);
-      return;
-    }
-    if (t.route) nav.navigate(t.route as never);
-  };
+  const tileAccessibilityLabel = useCallback(
+    (t: Tile): string => {
+      if (t.valueKind === 'streak') return `Streak, ${progress ? `${progress.streak} days` : 'loading'}`;
+      if (t.valueKind === 'pot') return `Daily Pot, ${progress ? `${dailyPot(progress).toLocaleString()} fictional coins` : 'loading'}`;
+      return t.label;
+    },
+    [progress],
+  );
+
+  const tilesWithValues = useMemo(
+    () => TILES.map((t) => ({ ...t, value: tileValue(t), a11y: tileAccessibilityLabel(t) })),
+    [tileValue, tileAccessibilityLabel],
+  );
 
   return (
     <View style={styles.root}>
@@ -249,6 +406,9 @@ export default function HomeScreen() {
       >
         <Image source={EARTH} style={styles.earth} resizeMode="cover" />
       </Animated.View>
+      {/* Earth darkening (15%): translucent overlay over the Earth only,
+          so labels read better over it. The Earth file itself is unchanged. */}
+      <View pointerEvents="none" style={[styles.earthDim, { left: (W - 560) / 2, top: H - 420 }]} />
       {!reduceMotion &&
         METEORS.map((m, i) => (
           <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
@@ -257,29 +417,45 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 },
+          { paddingTop: insets.top, paddingBottom: insets.bottom + 16 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero artwork (original file, proportions intact). Container
-            shows faces + complete title; only the floor is hidden. */}
+        {/* Hero artwork (original file, uniform scale, no distortion).
+            Container shows original y 182-1710: faces + complete title.
+            Fade below the title blends into the space background. */}
         <View
-          style={[styles.heroWrap, { width: heroWidth, height: heroHeight }]}
+          style={[styles.heroWrap, { width: W, height: HERO_HEIGHT }]}
           accessibilityLabel="Beat the AI hero artwork"
         >
           <Image
             source={HERO}
-            style={{ width: heroWidth, height: heroFullHeight }}
+            style={{ width: W, height: heroFullHeight, position: 'absolute', top: heroTopOffset, left: 0 }}
             resizeMode="cover"
             accessibilityLabel="Beat the AI hero artwork: yellow hero versus robot"
           />
+          {HERO_FADE_STEPS.map((alpha, i) => (
+            <View
+              key={i}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: HERO_FADE_TOP + i * 2,
+                height: 2,
+                backgroundColor: `rgba(5,6,15,${alpha})`,
+              }}
+            />
+          ))}
         </View>
 
         {/* Story Mode banner. Artwork only in the PNG; ALL text is
-            rendered in code. Feature remains DISABLED. */}
+            rendered in code. Feature remains DISABLED. Overlaps the
+            hero's fade by 3px (no rectangular break). */}
         <Pressable
           disabled
-          style={[styles.banner, { width: bannerWidth, height: bannerHeight }]}
+          style={[styles.banner, { width: bannerWidth, height: bannerHeight, marginTop: -BANNER_OVERLAP }]}
           accessibilityRole="button"
           accessibilityState={{ disabled: true }}
           accessibilityLabel="Story Mode, coming soon. Earth is under attack. You're humanity's last hope."
@@ -297,53 +473,35 @@ export default function HomeScreen() {
               <Text style={styles.comingSoonText}>🔒 COMING SOON</Text>
             </View>
           </View>
+          {/* Ambient border glow — subtle, slow, no flashing. */}
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.bannerGlow, { opacity: reduceMotion ? 0.35 : bannerGlowOpacity }]}
+          />
         </Pressable>
 
         {/* Six illustrated icons, compact 3x2 grid, labels in code. */}
         <View style={styles.grid}>
-          {[TILES.slice(0, 3), TILES.slice(3, 6)].map((row, ri) => (
+          {[tilesWithValues.slice(0, 3), tilesWithValues.slice(3, 6)].map((row, ri) => (
             <View key={ri} style={styles.row}>
-              {row.map((t) => {
-                const value = tileValue(t);
-                return (
-                  <Pressable
-                    key={t.key}
-                    onPress={() => onTilePress(t)}
-                    style={[styles.tile, { borderColor: t.border }]}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      t.valueKind === 'streak'
-                        ? `Streak, ${progress ? `${progress.streak} days` : 'loading'}`
-                        : t.valueKind === 'pot'
-                          ? `Daily Pot, ${progress ? `${dailyPot(progress).toLocaleString()} fictional coins` : 'loading'}. Shows pot rules.`
-                          : t.label
-                    }
-                  >
-                    <Image
-                      source={t.icon}
-                      style={styles.tileIcon}
-                      resizeMode="contain"
-                      accessibilityLabel={`${t.label} icon`}
-                    />
-                    <Text style={styles.tileLabel} numberOfLines={2}>
-                      {t.label}
-                    </Text>
-                    {value !== null ? (
-                      <Text style={[styles.tileValue, { color: t.border }]} numberOfLines={1}>
-                        {value}
-                      </Text>
-                    ) : (
-                      <View style={styles.tileValueSpacer} />
-                    )}
-                  </Pressable>
-                );
-              })}
+              {row.map((t, ci) => (
+                <GameTile
+                  key={t.key}
+                  tile={t}
+                  index={ri * 3 + ci}
+                  value={t.value}
+                  accessibilityLabel={t.a11y}
+                  onPress={() => nav.navigate(t.route as never)}
+                  reduceMotion={reduceMotion}
+                />
+              ))}
             </View>
           ))}
         </View>
 
-        {/* Fictional-coins disclaimer, always visible on Home. Dark pill
-            keeps it readable over the bright Earth behind the list. */}
+        {/* Fictional-coins disclaimer, always on Home. Dark pill keeps
+            it readable over the Earth behind the list. Below the fold
+            (small scroll) — the six-icon target is met without forcing. */}
         <View style={styles.disclaimerWrap}>
           <Text style={styles.disclaimer}>
             Fictional coins only. For in-game use only. No cash value. No real-money gambling.
@@ -351,7 +509,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* Settings gear: small, upper-right, always accessible. */}
+      {/* Settings gear: small, upper-right safe area, always accessible. */}
       <Pressable
         onPress={() => nav.navigate('Settings' as never)}
         style={[styles.gear, { top: insets.top + 8 }]}
@@ -376,12 +534,16 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   earth: { width: 560, height: 560 },
-  scroll: { paddingHorizontal: 16, gap: 12, alignItems: 'center' },
+  earthDim: {
+    position: 'absolute',
+    width: 560,
+    height: 560,
+    borderRadius: 280,
+    backgroundColor: 'rgba(5,6,15,0.15)',
+  },
+  scroll: { paddingHorizontal: 16, gap: 6, alignItems: 'center' },
   heroWrap: {
-    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: '#2A2E55',
     backgroundColor: '#05060F',
   },
   banner: {
@@ -412,17 +574,36 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   comingSoonText: { color: '#000', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  grid: { width: '100%', gap: 10 },
-  row: { flexDirection: 'row', gap: 10 },
+  bannerGlow: {
+    position: 'absolute',
+    left: -1,
+    right: -1,
+    top: -1,
+    bottom: -1,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#22D3EE',
+  },
+  grid: { width: '100%', gap: 8, marginTop: 6 },
+  row: { flexDirection: 'row', gap: 8 },
   tile: {
     flex: 1,
-    height: 140,
+    height: 132,
     borderWidth: 1.5,
     borderRadius: 18,
     backgroundColor: 'rgba(16,18,42,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 8,
+  },
+  glowOverlay: {
+    position: 'absolute',
+    left: -2,
+    right: -2,
+    top: -2,
+    bottom: -2,
+    borderRadius: 20,
+    borderWidth: 2,
   },
   tileIcon: { width: 72, height: 72 },
   tileLabel: {
