@@ -44,12 +44,19 @@
 //   progress / fictional-coin balances UNCHANGED. Fictional-coins
 //   disclaimer REMOVED from Home (Atlas Final Adjustment 2026-10-18) —
 //   disclosures remain in Settings / Terms / FeaturedDashboard.
-// - Screen fit: hero 505 + banner 100 + grid 272 = row 2 ends y880.
-//   SPACE DEFICIT (reported per Master prompt §7): row 2's values end
-//   y865, so a ~21px scroll reveals all six icons fully (row 2 icons are
-//   visible without scrolling; labels mostly; values need ~21px). Premium
-//   appearance was NOT sacrificed to force one screen (no extra hair crop,
-//   no icon shrink, no banner distortion).
+// - Screen fit (Atlas Final Correction, 390x844): hero extends into the
+//   top safe area (ScrollView paddingTop 0 — hero top is dark, status-bar
+//   text stays legible, Dynamic Island overlays dark scenery, no faces
+//   covered). Hero 485 (shows original y 182-1648: faces + COMPLETE title
+//   intact, cuts only non-essential floor) + banner 100 (3px hero overlap)
+//   + grid 240 (tiles 116, icon 60, gap 8) = row 2 ends y822, 8px clearance
+//   above the home indicator (830). All six tiles + labels + values fit
+//   without scrolling. ScrollView gap 0, grid marginTop 0. Meteors render
+//   ABOVE the ScrollView (pointerEvents="none", peak opacity 0.6) so they
+//   are visible without obscuring faces/logo/labels. Earth 120s + 15% dim
+//   UNCHANGED. 375x667: content overflows (row 2 ends ~818, screen 667) —
+//   scrolling required on the smaller screen (graceful degradation, no
+//   clipping, gear accessible). No further shrinking (stop condition).
 // - No new dependencies. No Stage 3 gameplay. No baseline merge.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -244,7 +251,7 @@ function Meteor({ delay, duration, topPct, drift }: { delay: number; duration: n
 
   const translateX = p.interpolate({ inputRange: [0, 1], outputRange: [W + 80, -220] });
   const translateY = p.interpolate({ inputRange: [0, 1], outputRange: [0, drift] });
-  const opacity = p.interpolate({ inputRange: [0, 0.08, 0.85, 1], outputRange: [0, 1, 1, 0] });
+  const opacity = p.interpolate({ inputRange: [0, 0.08, 0.85, 1], outputRange: [0, 0.6, 0.6, 0] });
 
   return (
     <Animated.View
@@ -339,15 +346,16 @@ export default function HomeScreen() {
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const bannerGlowOpacity = bannerGlow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.65] });
 
-  // Hero geometry: FULL-WIDTH, 505 tall. The original file (1179x2549) is
+  // Hero geometry: FULL-WIDTH, 485 tall. The original file (1179x2549) is
   // shown at uniform scale (width W → full height W*2549/1179 = 843).
-  // The container shows original y 182-1710 (10.6% top crop, measured):
+  // The container shows original y 182-1648 (10.6% top crop, measured):
   // image top offset = -(182 * W/1179) = -60. Faces + complete title
-  // fully visible; fade (485-505) sits BELOW the title (ends y485).
+  // fully visible (title ends original y 1647, container y 485). Fade
+  // (465-485) blends the title's lower edge into the banner below.
   const heroFullHeight = W * (2549 / 1179);
   const heroTopOffset = -(182 * (W / 1179));
-  const HERO_HEIGHT = 505;
-  const HERO_FADE_TOP = 485;
+  const HERO_HEIGHT = 485;
+  const HERO_FADE_TOP = 465;
 
   // Story Mode banner geometry: full-width within margins (W-32), aspect
   // 1074:300 preserved (no distortion). Overlaps the hero's fade by 3px.
@@ -410,15 +418,10 @@ export default function HomeScreen() {
       {/* Earth darkening (15%): translucent overlay over the Earth only,
           so labels read better over it. The Earth file itself is unchanged. */}
       <View pointerEvents="none" style={[styles.earthDim, { left: (W - 560) / 2, top: H - 420 }]} />
-      {!reduceMotion &&
-        METEORS.map((m, i) => (
-          <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
-        ))}
-
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top, paddingBottom: insets.bottom + 16 },
+          { paddingTop: 0, paddingBottom: insets.bottom + 16 },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -502,6 +505,15 @@ export default function HomeScreen() {
 
       </ScrollView>
 
+      {/* Meteors: rendered ABOVE the ScrollView content (pointerEvents="none")
+          so streaks are visible over the opaque hero/banner/cards. Peak
+          opacity 0.6 (translucent) so they never obscure faces, the logo,
+          labels, or interactive elements. Taps pass through. */}
+      {!reduceMotion &&
+        METEORS.map((m, i) => (
+          <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
+        ))}
+
       {/* Settings gear: small, upper-right safe area, always accessible. */}
       <Pressable
         onPress={() => nav.navigate('Settings' as never)}
@@ -534,7 +546,7 @@ const styles = StyleSheet.create({
     borderRadius: 280,
     backgroundColor: 'rgba(5,6,15,0.15)',
   },
-  scroll: { paddingHorizontal: 16, gap: 6, alignItems: 'center' },
+  scroll: { paddingHorizontal: 16, gap: 0, alignItems: 'center' },
   heroWrap: {
     overflow: 'hidden',
     backgroundColor: '#05060F',
@@ -577,17 +589,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#22D3EE',
   },
-  grid: { width: '100%', gap: 8, marginTop: 6 },
+  grid: { width: '100%', gap: 8, marginTop: 0 },
   row: { flexDirection: 'row', gap: 8 },
   tile: {
     flex: 1,
-    height: 132,
+    height: 116,
     borderWidth: 1.5,
     borderRadius: 18,
     backgroundColor: 'rgba(16,18,42,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   glowOverlay: {
     position: 'absolute',
@@ -598,7 +611,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 2,
   },
-  tileIcon: { width: 72, height: 72 },
+  tileIcon: { width: 60, height: 60 },
   tileLabel: {
     color: '#fff',
     fontSize: 12,
