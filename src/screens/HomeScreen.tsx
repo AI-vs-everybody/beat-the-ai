@@ -42,7 +42,8 @@
 //   preserved for Story Mode — NOT rendered, NOT deleted).
 // - Settings gear upper-right, 44x44 + hitSlop. Navigation / game logic /
 //   progress / fictional-coin balances UNCHANGED. Fictional-coins
-//   disclaimer on Home (footer pill, below the fold — small scroll).
+//   disclaimer REMOVED from Home (Atlas Final Adjustment 2026-10-18) —
+//   disclosures remain in Settings / Terms / FeaturedDashboard.
 // - Screen fit: hero 505 + banner 100 + grid 272 = row 2 ends y880.
 //   SPACE DEFICIT (reported per Master prompt §7): row 2's values end
 //   y865, so a ~21px scroll reveals all six icons fully (row 2 icons are
@@ -499,14 +500,6 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* Fictional-coins disclaimer, always on Home. Dark pill keeps
-            it readable over the Earth behind the list. Below the fold
-            (small scroll) — the six-icon target is met without forcing. */}
-        <View style={styles.disclaimerWrap}>
-          <Text style={styles.disclaimer}>
-            Fictional coins only. For in-game use only. No cash value. No real-money gambling.
-          </Text>
-        </View>
       </ScrollView>
 
       {/* Settings gear: small, upper-right safe area, always accessible. */}
@@ -616,14 +609,6 @@ const styles = StyleSheet.create({
   },
   tileValue: { fontSize: 11, fontWeight: '800', textAlign: 'center', marginTop: 2, height: 16 },
   tileValueSpacer: { height: 16, marginTop: 2 },
-  disclaimerWrap: {
-    backgroundColor: 'rgba(5,6,15,0.7)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: 4,
-  },
-  disclaimer: { color: '#9AA0B5', fontSize: 11, lineHeight: 15, textAlign: 'center' },
   gear: {
     position: 'absolute',
     right: 16,
