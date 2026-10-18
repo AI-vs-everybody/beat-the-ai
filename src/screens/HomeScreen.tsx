@@ -1,23 +1,67 @@
 // src/screens/HomeScreen.tsx
-// RESTORATION Step 1 — Home shell + Game Modes list, rebuilt from the
-// authoritative screenshots (refs/ref-home-game-modes.jpg).
-// - Rotating Earth (NASA Blue Marble, public domain) behind all panels.
-// - Daily Challenge is the only wired mode. Every other card is visibly
-//   marked SOON and disabled — no nonfunctional navigation (per brief).
-// - The skeleton's "Welcome, human..." greeting is replaced by the
-//   screenshot's own taglines ("Save the world...", "The AI's waiting...").
-// - The "Dark" pill is a display-only theme indicator, not a toggle.
-// - Meteor streaks fly across the sky on staggered loops (Step 1b).
-//   Pure decoration: pointerEvents="none", never blocks touches.
+// HOME SCREEN — Master Concept implementation (Atlas-approved, 2026-10-18).
+// Atlas: Asset 001 Story Mode banner visually approved + locked; Assets
+// 002–007 visually approved for integration testing. Implement on the
+// isolated development branch only. STOP before merging.
+//
+// Layout (390x844 iPhone, safe areas via useSafeAreaInsets):
+// - Hero artwork (original file, proportions intact): shown at a width
+//   that lets the faces + complete "BEAT THE AI" title fit WITHOUT
+//   cropping either. The image is scaled uniformly to heroWidth; the
+//   container height = heroWidth * (1650/1179), so it shows original
+//   y 0–1650 (faces + title) and hides only the non-essential floor
+//   (y 1650–2549) below the container. NEVER crop faces or title.
+// - Story Mode banner beneath the hero. Artwork only in the PNG;
+//   "STORY MODE" + subtitle + "COMING SOON" lock pill are rendered
+//   in code. Feature remains disabled (Pressable disabled, no onPress).
+// - Six illustrated icons in a compact 3x2 grid, labels in code.
+//   Streak + Daily Pot show LIVE values in code (NOT baked into art):
+//   Streak -> "N days" (from progress.streak), Daily Pot -> "N fictional
+//   coins" (from dailyPot(progress)). Streak taps to Missions; Daily Pot
+//   taps to an Alert with the pot rules + fictional-coins disclaimer.
+// - Earth (rotating), starfield, meteors stay BEHIND the interface,
+//   all pointerEvents="none", never intercept touches.
+// - Walking character REMOVED from Home per Atlas V2/V3/Master
+//   directions. WalkingCharacter.tsx + frame PNGs are PRESERVED in
+//   the repo for future Story Mode — NOT rendered here, NOT deleted.
+// - Settings gear: small, upper-right, 44x44 + hitSlop (effective 60).
+// - Navigation / game logic / progress / fictional-coin balances are
+//   unchanged: Daily, PuzzleArena, Missions, Multiplayer routes; pot
+//   + streak + midnight rollover via progress.ts (unchanged).
+// - Reduced motion: if AccessibilityInfo reports reduce-motion, Earth
+//   renders static (no spin loop) and meteors are hidden.
+// - No new dependencies. No Stage 3 gameplay. No baseline merge.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet, Easing, Dimensions } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  Animated,
+  Image,
+  StyleSheet,
+  Easing,
+  Dimensions,
+  AccessibilityInfo,
+  Alert,
+  ImageSourcePropType,
+} from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import FeaturedDashboard from '../components/FeaturedDashboard';
-import WalkingCharacter from '../components/WalkingCharacter';
-import { loadProgress, todayKey, Progress } from '../data/progress';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { loadProgress, todayKey, Progress, dailyPot } from '../data/progress';
+import { POT_RULES } from '../components/FeaturedDashboard';
 
+const HERO = require('../../assets/hero-artwork.jpg');
+const BANNER = require('../../assets/story-mode-banner.png');
+const ICON_DAILY = require('../../assets/icon-daily-challenge.png');
+const ICON_PUZZLE = require('../../assets/icon-puzzle-arena.png');
+const ICON_MISSIONS = require('../../assets/icon-missions.png');
+const ICON_MULTIPLAYER = require('../../assets/icon-multiplayer.png');
+const ICON_STREAK = require('../../assets/icon-streak.png');
+const ICON_POT = require('../../assets/icon-daily-pot.png');
 const EARTH = require('../../assets/earth.jpg');
-const { width: W } = Dimensions.get('window');
+
+const { width: W, height: H } = Dimensions.get('window');
 
 // Deterministic starfield (seeded, so it never flickers between renders).
 function buildStars(count: number) {
@@ -36,81 +80,23 @@ function buildStars(count: number) {
 }
 const STARS = buildStars(60);
 
-type Mode = {
+type Tile = {
   key: string;
-  icon: string;
-  title: string;
-  subtitle: string;
-  color: string;
+  label: string;
+  icon: ImageSourcePropType;
+  border: string;
   route?: string;
-  soon?: boolean;
+  action?: 'potInfo';
+  valueKind?: 'streak' | 'pot';
 };
 
-const MODES: Mode[] = [
-  {
-    key: 'roast',
-    icon: '🤖',
-    title: 'Beat the AI — Roast Sort',
-    subtitle: 'Neon data, savage taunts, jackpots.',
-    color: '#5B6CFF',
-    soon: true,
-  },
-  {
-    key: 'daily',
-    icon: '⚡',
-    title: 'Daily Challenge',
-    subtitle: 'Smart trivia sessions. New set every day.',
-    color: '#22D3EE',
-    route: 'Daily',
-  },
-  {
-    key: 'pattern',
-    icon: '🧠',
-    title: 'Pattern Gauntlet',
-    subtitle: 'Remember and repeat the sequences.',
-    color: '#7C6CFF',
-    soon: true,
-  },
-  {
-    key: 'reflex',
-    icon: '💨',
-    title: 'Reflex Arena',
-    subtitle: 'Arcade-speed taps & swipes. Escalating pace.',
-    color: '#22D3EE',
-    soon: true,
-  },
-  {
-    key: 'multiplayer',
-    icon: '👥',
-    title: 'Multiplayer',
-    subtitle: 'Co-op vs AI or head-to-head.',
-    color: '#FACC15',
-    route: 'Multiplayer',
-  },
-  {
-    key: 'party',
-    icon: '🎉',
-    title: 'Party Mode (soon)',
-    subtitle: 'Up to 4 players — versus or co-op.',
-    color: '#F87171',
-    soon: true,
-  },
-  {
-    key: 'leaderboard',
-    icon: '🏆',
-    title: 'Leaderboard',
-    subtitle: 'Global rankings (coming soon).',
-    color: '#4ADE80',
-    soon: true,
-  },
-  {
-    key: 'puzzle',
-    icon: '🧩',
-    title: 'Puzzle Arena',
-    subtitle: 'Pick a difficulty. Puzzles coming soon.',
-    color: '#F472B6',
-    route: 'PuzzleArena',
-  },
+const TILES: Tile[] = [
+  { key: 'daily', label: 'Daily Challenge', icon: ICON_DAILY, border: '#22D3EE', route: 'Daily' },
+  { key: 'puzzle', label: 'Puzzle Arena', icon: ICON_PUZZLE, border: '#C084FC', route: 'PuzzleArena' },
+  { key: 'missions', label: 'Missions', icon: ICON_MISSIONS, border: '#34D399', route: 'Missions' },
+  { key: 'multiplayer', label: 'Multiplayer', icon: ICON_MULTIPLAYER, border: '#60A5FA', route: 'Multiplayer' },
+  { key: 'streak', label: 'Streak', icon: ICON_STREAK, border: '#FB923C', route: 'Missions', valueKind: 'streak' },
+  { key: 'pot', label: 'Daily Pot', icon: ICON_POT, border: '#FACC15', action: 'potInfo', valueKind: 'pot' },
 ];
 
 // One meteor streak: flies diagonally down-left, fades in/out, then rests
@@ -163,12 +149,20 @@ const METEORS = [
 
 export default function HomeScreen() {
   const nav = useNavigation();
+  const insets = useSafeAreaInsets();
   const spin = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Reduced-motion: stop/reduce background animation when the OS asks.
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => sub.remove();
+  }, []);
 
   // Focus refresh + midnight refresh, both only while Home is focused.
-  // - Focus refresh (existing behavior): reload progress whenever Home
-  //   regains focus (e.g. returning from Daily).
+  // - Focus refresh: reload progress whenever Home regains focus.
   // - Midnight refresh: while focused, poll the local calendar date every
   //   30s. The date string is compared BEFORE any storage read — if the
   //   date has not changed, AsyncStorage is never touched. On a date flip,
@@ -190,21 +184,53 @@ export default function HomeScreen() {
   );
 
   useEffect(() => {
+    if (reduceMotion) return;
     const loop = Animated.loop(
       Animated.timing(spin, { toValue: 1, duration: 120000, useNativeDriver: true }),
     );
     loop.start();
     return () => loop.stop();
-  }, [spin]);
+  }, [spin, reduceMotion]);
 
   const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
+  // Hero geometry: uniform scale, faces + title visible, floor hidden.
+  // Width chosen so hero + banner + grid + disclaimer fit the 390x844
+  // first screen with no scrolling needed to discover the modes, and
+  // the disclaimer ends above the home indicator.
+  const heroWidth = Math.min(W * 0.58, 225);
+  const heroHeight = heroWidth * (1650 / 1179);
+  const heroFullHeight = heroWidth * (2549 / 1179);
+
+  // Story Mode banner geometry: artwork aspect 1074:300 preserved.
+  const bannerWidth = W - 48;
+  const bannerHeight = bannerWidth * (300 / 1074);
+
+  // Live values, rendered in code (NOT baked into the icon artwork).
+  const streakValue = progress ? `🔥 ${progress.streak} day${progress.streak === 1 ? '' : 's'}` : '—';
+  const potValue = progress ? `🪙 ${dailyPot(progress).toLocaleString()}` : '—';
+
+  const tileValue = (t: Tile): string | null => {
+    if (t.valueKind === 'streak') return streakValue;
+    if (t.valueKind === 'pot') return potValue;
+    return null;
+  };
+
+  const onTilePress = (t: Tile) => {
+    if (t.action === 'potInfo') {
+      Alert.alert('Daily Pot', POT_RULES);
+      return;
+    }
+    if (t.route) nav.navigate(t.route as never);
+  };
+
   return (
     <View style={styles.root}>
-      {/* Space backdrop: stars + rotating Earth, behind everything. */}
+      {/* Space backdrop: stars + rotating Earth + meteors, behind everything. */}
       {STARS.map((s) => (
         <View
           key={s.id}
+          pointerEvents="none"
           style={{
             position: 'absolute',
             left: `${s.left}%`,
@@ -217,64 +243,124 @@ export default function HomeScreen() {
           }}
         />
       ))}
-      <Animated.View pointerEvents="none" style={[styles.earthWrap, { transform: [{ rotate }] }]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.earthWrap, { left: (W - 560) / 2, top: H - 420, transform: [{ rotate }] }]}
+      >
         <Image source={EARTH} style={styles.earth} resizeMode="cover" />
       </Animated.View>
-      {METEORS.map((m, i) => (
-        <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
-      ))}
-      {/* ASSET #008 walk test — over Earth, behind panels, pointerEvents="none". */}
-      <WalkingCharacter />
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>Beat the AI</Text>
-            <Text style={styles.tagline}>Save the world. One pattern at a time.</Text>
-          </View>
-          <Pressable
-            onPress={() => nav.navigate('Settings' as never)}
-            style={styles.gear}
-            accessibilityLabel="Open Settings"
-          >
-            <Text style={{ fontSize: 24 }}>⚙️</Text>
-          </Pressable>
-        </View>
-
-        {/* Featured dashboard (Step 2) — real pot / countdown / missions / streak. */}
-        {progress && <FeaturedDashboard progress={progress} />}
-
-        {/* Game Modes */}
-        <Text style={styles.sectionTitle}>Game Modes</Text>
-        <Text style={styles.sectionSub}>The AI&apos;s waiting. Don&apos;t keep it bored.</Text>
-
-        {MODES.map((m) => (
-          <Pressable
-            key={m.key}
-            disabled={m.soon}
-            onPress={() => m.route && nav.navigate(m.route as never)}
-            style={[styles.card, { borderColor: m.color, opacity: m.soon ? 0.75 : 1 }]}
-          >
-            <Text style={styles.cardIcon}>{m.icon}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{m.title}</Text>
-              <Text style={styles.cardSub}>{m.subtitle}</Text>
-            </View>
-            {m.soon ? (
-              <Text style={[styles.soonPill, { borderColor: m.color, color: m.color }]}>SOON</Text>
-            ) : (
-              <View style={[styles.dot, { backgroundColor: m.color }]} />
-            )}
-          </Pressable>
+      {!reduceMotion &&
+        METEORS.map((m, i) => (
+          <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
         ))}
 
-        {/* Theme indicator (display-only — Dark is the only theme). */}
-        <View style={styles.darkPill}>
-          <View style={styles.darkDot} />
-          <Text style={styles.darkText}>Dark</Text>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero artwork (original file, proportions intact). Container
+            shows faces + complete title; only the floor is hidden. */}
+        <View
+          style={[styles.heroWrap, { width: heroWidth, height: heroHeight }]}
+          accessibilityLabel="Beat the AI hero artwork"
+        >
+          <Image
+            source={HERO}
+            style={{ width: heroWidth, height: heroFullHeight }}
+            resizeMode="cover"
+            accessibilityLabel="Beat the AI hero artwork: yellow hero versus robot"
+          />
+        </View>
+
+        {/* Story Mode banner. Artwork only in the PNG; ALL text is
+            rendered in code. Feature remains DISABLED. */}
+        <Pressable
+          disabled
+          style={[styles.banner, { width: bannerWidth, height: bannerHeight }]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: true }}
+          accessibilityLabel="Story Mode, coming soon. Earth is under attack. You're humanity's last hope."
+        >
+          <Image
+            source={BANNER}
+            style={{ width: bannerWidth, height: bannerHeight }}
+            resizeMode="cover"
+            accessibilityLabel="Story Mode banner artwork"
+          />
+          <View style={styles.bannerText}>
+            <Text style={styles.bannerTitle}>STORY MODE</Text>
+            <Text style={styles.bannerSub}>Earth is under attack.{'\n'}You&apos;re humanity&apos;s last hope.</Text>
+            <View style={styles.comingSoonPill}>
+              <Text style={styles.comingSoonText}>🔒 COMING SOON</Text>
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Six illustrated icons, compact 3x2 grid, labels in code. */}
+        <View style={styles.grid}>
+          {[TILES.slice(0, 3), TILES.slice(3, 6)].map((row, ri) => (
+            <View key={ri} style={styles.row}>
+              {row.map((t) => {
+                const value = tileValue(t);
+                return (
+                  <Pressable
+                    key={t.key}
+                    onPress={() => onTilePress(t)}
+                    style={[styles.tile, { borderColor: t.border }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      t.valueKind === 'streak'
+                        ? `Streak, ${progress ? `${progress.streak} days` : 'loading'}`
+                        : t.valueKind === 'pot'
+                          ? `Daily Pot, ${progress ? `${dailyPot(progress).toLocaleString()} fictional coins` : 'loading'}. Shows pot rules.`
+                          : t.label
+                    }
+                  >
+                    <Image
+                      source={t.icon}
+                      style={styles.tileIcon}
+                      resizeMode="contain"
+                      accessibilityLabel={`${t.label} icon`}
+                    />
+                    <Text style={styles.tileLabel} numberOfLines={2}>
+                      {t.label}
+                    </Text>
+                    {value !== null ? (
+                      <Text style={[styles.tileValue, { color: t.border }]} numberOfLines={1}>
+                        {value}
+                      </Text>
+                    ) : (
+                      <View style={styles.tileValueSpacer} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        {/* Fictional-coins disclaimer, always visible on Home. Dark pill
+            keeps it readable over the bright Earth behind the list. */}
+        <View style={styles.disclaimerWrap}>
+          <Text style={styles.disclaimer}>
+            Fictional coins only. For in-game use only. No cash value. No real-money gambling.
+          </Text>
         </View>
       </ScrollView>
+
+      {/* Settings gear: small, upper-right, always accessible. */}
+      <Pressable
+        onPress={() => nav.navigate('Settings' as never)}
+        style={[styles.gear, { top: insets.top + 8 }]}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Open Settings"
+      >
+        <Text style={styles.gearText}>⚙️</Text>
+      </Pressable>
     </View>
   );
 }
@@ -283,8 +369,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#05060F' },
   earthWrap: {
     position: 'absolute',
-    top: -140,
-    alignSelf: 'center',
     width: 560,
     height: 560,
     borderRadius: 280,
@@ -292,58 +376,86 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   earth: { width: 560, height: 560 },
-  scroll: { padding: 20, paddingTop: 56, paddingBottom: 32 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  title: { color: '#fff', fontSize: 40, fontWeight: '900', letterSpacing: 0.5 },
-  tagline: { color: '#9AA0B5', fontSize: 15, fontWeight: '600', marginTop: 4 },
-  gear: {
-    borderWidth: 1,
-    borderColor: '#2A2E55',
-    borderRadius: 14,
-    padding: 10,
-    backgroundColor: 'rgba(16,18,42,0.85)',
-  },
-  sectionTitle: { color: '#fff', fontSize: 30, fontWeight: '900', marginTop: 28 },
-  sectionSub: { color: '#9AA0B5', fontSize: 15, marginTop: 4, marginBottom: 16 },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1.5,
+  scroll: { paddingHorizontal: 16, gap: 12, alignItems: 'center' },
+  heroWrap: {
     borderRadius: 20,
-    backgroundColor: 'rgba(16,18,42,0.92)',
-    padding: 16,
-    marginBottom: 14,
-  },
-  cardIcon: { fontSize: 28 },
-  cardTitle: { color: '#fff', fontSize: 19, fontWeight: '800' },
-  cardSub: { color: '#9AA0B5', fontSize: 14, marginTop: 2 },
-  dot: { width: 12, height: 12, borderRadius: 6 },
-  soonPill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
     overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#2A2E55',
+    backgroundColor: '#05060F',
   },
-  darkPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  banner: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#22D3EE',
+    backgroundColor: '#0A0E2A',
+  },
+  bannerText: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '62%',
+    padding: 12,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(5,6,15,0.45)',
+  },
+  bannerTitle: { color: '#fff', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  bannerSub: { color: '#C7D2FE', fontSize: 11.5, lineHeight: 15, marginTop: 3 },
+  comingSoonPill: {
     alignSelf: 'flex-start',
+    backgroundColor: '#FACC15',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 8,
+  },
+  comingSoonText: { color: '#000', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  grid: { width: '100%', gap: 10 },
+  row: { flexDirection: 'row', gap: 10 },
+  tile: {
+    flex: 1,
+    height: 140,
+    borderWidth: 1.5,
+    borderRadius: 18,
+    backgroundColor: 'rgba(16,18,42,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  tileIcon: { width: 72, height: 72 },
+  tileLabel: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 15,
+    marginTop: 6,
+  },
+  tileValue: { fontSize: 11, fontWeight: '800', textAlign: 'center', marginTop: 2, height: 16 },
+  tileValueSpacer: { height: 16, marginTop: 2 },
+  disclaimerWrap: {
+    backgroundColor: 'rgba(5,6,15,0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 4,
+  },
+  disclaimer: { color: '#9AA0B5', fontSize: 11, lineHeight: 15, textAlign: 'center' },
+  gear: {
+    position: 'absolute',
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#2A2E55',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: 8,
     backgroundColor: 'rgba(16,18,42,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  darkDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#22D3EE' },
-  darkText: { color: '#fff', fontWeight: '700' },
+  gearText: { fontSize: 22 },
   meteorHead: {
     width: 6,
     height: 6,
