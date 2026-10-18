@@ -13,6 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, Animated, Image, StyleSheet, Easing, Dimensions } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import FeaturedDashboard from '../components/FeaturedDashboard';
+import WalkingCharacter from '../components/WalkingCharacter';
 import { loadProgress, todayKey, Progress } from '../data/progress';
 
 const EARTH = require('../../assets/earth.jpg');
@@ -222,6 +223,8 @@ export default function HomeScreen() {
       {METEORS.map((m, i) => (
         <Meteor key={i} delay={m.delay} duration={m.duration} topPct={m.topPct} drift={m.drift} />
       ))}
+      {/* ASSET #008 walk test — over Earth, behind panels, pointerEvents="none". */}
+      <WalkingCharacter />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
